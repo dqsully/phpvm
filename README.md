@@ -13,11 +13,6 @@ phpvm install composer
 
 ## Commands
 
-### `phpvm ls-remote <tool>`
-Where `<tool>` is `php` or `composer`, lists available versions for download for the appropriate tool.
-
-This command fetches from http://php.net/downloads.php and http://php.net/releases/ for PHP versions, and https://getcomposer.org/download/ for Composer versions.
-
 ### `phpvm install <tool> [version]`
 Where `<tool>` is `php` or `composer`, installs the specified version of that tool.
 
@@ -25,6 +20,11 @@ If version isn't set, it defaults to `*`. If version is only partial, the remain
 
 ### `phpvm ls [tool]`
 Where `<tool>` may be `php`, `composer`, or unset, lists installed versions of those tools.
+
+### `phpvm ls-remote <tool>`
+Where `<tool>` is `php` or `composer`, lists available versions for download for the appropriate tool.
+
+This command fetches from http://php.net/downloads.php and http://php.net/releases/ for PHP versions, and https://getcomposer.org/download/ for Composer versions.
 
 ### `phpvm bin <tool> [version]`
 Where `<tool>` is `php` or `composer`, prints the binary path for the appropriate tool and version.
