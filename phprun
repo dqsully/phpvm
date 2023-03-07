@@ -10,7 +10,7 @@ usage() {
 
 error() {
   echo "Version '$1' is not installed. Either install it or use one amongst these:"
-  phpvm ls | tail -n +2
+  phpvm ls php | tail -n +2
   exit 1
 }
 
@@ -20,7 +20,7 @@ if [ $? != 0 ]; then
   exit 1
 fi
 
-versions=( $(phpvm ls | tail -n 1) )
+versions=( $(phpvm ls php | tail -n 1) )
 
 [ -z $1 ] || [ $1 == "-h" ] && usage
 [ ! -f "$1" ] && echo "$1: No such file." && exit 1
@@ -31,11 +31,11 @@ file=$1
 for ((i = 2; i <= $#; i++)); do
   versions+=(${!i})
 
-  phpvm bin ${!i} &> /dev/null
+  phpvm bin php ${!i} &> /dev/null
   [ $? != 0 ] && error "${!i}"
 done
 
 for version in "${versions[@]}"; do
   echo "$scriptname: starting `basename $file` with PHP v$version" >&2
-  $(phpvm bin "$version")/php "$file"
+  $(phpvm bin php "$version")/php "$file"
 done

@@ -1,87 +1,121 @@
 #!/usr/bin/env bash
 # a php version manager
-#
-# @todo quiet mode with log files
-# @todo handling configure options
-# @todo check deps before starting
 
 phpvm_path="$HOME/.phpvm"
-old_rels_cache_path="$phpvm_path/tmp/old_releases.html"
-rels_cache_path="$phpvm_path/tmp/releases.html"
+old_rels_cache_path_php="$phpvm_path/tmp/old_releases_php.html"
+rels_cache_path_php="$phpvm_path/tmp/releases_php.html"
+rels_cache_path_composer="$phpvm_path/tmp/releases_composer.html"
 downloads_path="$phpvm_path/tmp"
+php_installs_path="$phpvm_path/php-installs"
+composer_installs_path="$phpvm_path/composer-installs"
 
 usage() {
-    echo "Usage: phpvm cmd"
+    echo "Usage: phpvm <command>"
     echo ""
     echo "Commands:"
-    echo -e "\thelp\t\tshow this"
-    echo -e "\tls\t\tlist installed php versions"
-    echo -e "\tls-remote\tlist remote php versions"
-    echo -e "\tinstall version\tinstalls a remote php version"
-    echo -e "\tbin\t\tget bin path for an install"
-    echo -e "\tremove version\tremoves a php version"
+    echo -e "        help                                       show this"
+    echo -e "        ls [tool]                                  list installed php/composer versions"
+    echo -e "        ls-remote <tool>                           list remote php/composer versions"
+    echo -e "        install <tool> [version] [conf args...]    installs a remote php/composer version"
+    echo -e "        bin <tool> [version]                       get bin path for an install"
+    echo -e "        remove <tool> <version>                    removes a php/composer version"
+    echo -e "        path <tool> [version]                      prints a PATH text including the PHP version"
     echo ""
     echo "Examples:"
-    echo -e "\tphpvm install 7.0.4"
-    echo -e "\t\$(phpvm bin 7.0.4)/php --version"
-    echo -e "\t\$(phpvm bin 7.0.4)/composer --version"
-}
-
-deps() {
-    echo "libxml2-dev"
+    echo -e "   phpvm install php 8.0"
+    echo -e "   phpvm install composer"
+    echo -e "   \$(phpvm bin php 8.0)/php --version"
+    echo -e "   \$(phpvm bin composer)/composer --version"
 }
 
 dir_setup() {
-    mkdir -p ~/.phpvm
-    mkdir -p ~/.phpvm/tmp
-    mkdir -p ~/.phpvm/current
+    mkdir -p $phpvm_path
+    mkdir -p $downloads_path
+    mkdir -p $php_installs_path
+    mkdir -p $composer_installs_path
 }
 
-ls_remote__get_releases() {
-    wget -qO- 'http://php.net/releases/' > $old_rels_cache_path
-    wget -qO- 'http://php.net/downloads.php' > $rels_cache_path
+ls_remote_php__get_releases() {
+    wget -qO- 'http://php.net/releases/' > "$old_rels_cache_path_php"
+    wget -qO- 'http://php.net/downloads.php' > "$rels_cache_path_php"
     return 0
 }
 
-ls_remote__versions() {
-    local old_versions="$(cat $old_rels_cache_path| grep -o -e '[0-9]\+\.[0-9]\+\.[0-9]\+' | sort | uniq)"
-    local new_versions="$(cat $rels_cache_path | grep -o -e '[0-9]\+\.[0-9]\+\.[0-9]\+' | sort | uniq)"
-    echo "$old_versions"
-    echo "$new_versions"
-    return 0;
+ls_remote_composer__get_releases() {
+    wget -qO- 'https://getcomposer.org/download/' > "$rels_cache_path_composer"
+    return 0
+}
+
+ls_remote_php__versions() {
+    extract_versions "$old_rels_cache_path_php"
+    extract_versions "$rels_cache_path_php"
+    return 0
+}
+
+ls_remote_composer__versions() {
+    extract_versions "$rels_cache_path_composer"
+    return 0
 }
 
 ls_local() {
-    # installed means bin was linked
-    echo "Locally installed"
-    for dir in $phpvm_path/installs/*
-    do
-        if [ -f "$dir/bin/php" ]
-        then
-            echo "$(basename "$dir")"
-        fi
-    done
+    if [[ "$1" != "composer" ]]; then
+        echo "PHP:"
+        for dir in $php_installs_path/*; do
+            if [[ "$(basename "$dir")" != "*" ]]; then
+                if [ -f "$dir/bin/php" ]; then
+                    echo "$(basename "$dir")"
+                else
+                    echo "$(basename "$dir") (broken)"
+                fi
+            fi
+        done
+    fi
+
+    if [[ "$1" != "composer" ]]; then
+        echo "Composer:"
+        for dir in $composer_installs_path/*; do
+            if [[ "$(basename "$dir")" != "*" ]]; then
+                if [ -f "$dir/composer" ]; then
+                    echo "$(basename "$dir")"
+                else
+                    echo "$(basename "$dir") (broken)"
+                fi
+            fi
+        done
+    fi
 }
 
-ls_remote() {
-    local cache_time=$((60*15))
-    #local cache_time=0 # for debug
+extract_versions() {
+    local file="$1"
+    cat "$file" | grep -v '<script' | grep -o -e '[0-9]\+\.[0-9]\+\.[0-9]\+' | sort -V | uniq
+    return 0
+}
 
-    if [ -f "$old_rels_cache_path" ]
+latest_matching_version() {
+    local version_regex="$1"
+    sort -V | uniq | grep -E "$version_regex" | tail -n 1
+    return 0
+}
+
+ls_remote_php() {
+    local cache_time=$((60*15))
+    # local cache_time=0 # for debug
+
+    if [ -f "$old_rels_cache_path_php" ]
     then
-        local last_mod_time=$(stat "$old_rels_cache_path" -c %Y)
+        local last_mod_time=$(stat "$old_rels_cache_path_php" -c %Y)
         local cur_time=$(date +"%s")
         local time_diff=$(($cur_time - $last_mod_time))
         if [ "$time_diff" -gt "$cache_time" ]
         then
-            ls_remote__get_releases
+            ls_remote_php__get_releases
         fi
     else
-        ls_remote__get_releases
+        ls_remote_php__get_releases
     fi
 
-    local old_versions="$(cat $old_rels_cache_path| grep -o -e '[0-9]\+\.[0-9]\+\.[0-9]\+' | sort | uniq)"
-    local new_versions="$(cat $rels_cache_path | grep -o -e '[0-9]\+\.[0-9]\+\.[0-9]\+' | sort | uniq)"
+    local old_versions="$(extract_versions "$old_rels_cache_path_php")"
+    local new_versions="$(extract_versions "$rels_cache_path_php")"
     echo "Old versions:"
     echo "$old_versions"
     echo ""
@@ -89,92 +123,99 @@ ls_remote() {
     echo "$new_versions"
 }
 
-install_composer() {
-    local php_bin="$1"
-    local install_path="$2"
-    local installed_path="$install_path/composer.phar"
+ls_remote_composer() {
+    local cache_time=$((60*15))
+    # local cache_time=0 # for debug
 
-    if [ ! -f "$php_bin" ]
+    if [ -f "$rels_cache_path_composer" ]
     then
-        echo "$php_bin php bin not found"
+        local last_mod_time=$(stat "$rels_cache_path_composer" -c %Y)
+        local cur_time=$(date +"%s")
+        local time_diff=$(($cur_time - $last_mod_time))
+        if [ "$time_diff" -gt "$cache_time" ]
+        then
+            ls_remote_composer__get_releases
+        fi
+    else
+        ls_remote_composer__get_releases
+    fi
+
+    local versions="$(extract_versions "$rels_cache_path_composer")"
+    echo "Stable versions:"
+    echo "$versions"
+}
+
+version_to_regex() {
+    local version="$1"
+    if echo "$version" | grep -q -E '^([0-9]+|\*)$'; then
+        version="$version.*.*"
+    elif echo "$version" | grep -q -E '^([0-9]+|\*)\.([0-9]+|\*)$'; then
+        version="$version.*"
+    elif echo "$version" | grep -q -E '^([0-9]+|\*)\.([0-9]+|\*)\.([0-9]+|\*)$'; then
+        : # Do nothing
+    else
+        echo "Not a valid version number: $version"
         return 1
     fi
-
-    if [ ! -d "$install_path" ]
-    then
-        echo "$install_path install path not found"
-        return 1
-    fi
-
-    if [ ! -f "$installed_path" ]
-    then
-        wget -O "$installed_path" 'https://getcomposer.org/download/1.0.0-beta1/composer.phar'
-    fi
-
-    echo "#!/usr/bin/env bash
-$php_bin $install_path/composer.phar
-" > "$install_path/composer"
-
-    chmod +x "$install_path/composer"
-
+    echo "$version" | sed -E -e 's/\./[.]/g' -e 's/\*/[0-9]+/g'
     return 0
 }
 
-test_full_version() {
+get_php_version_dir() {
     local version="$1"
-    if echo "$version" | grep -q -e '[0-9]\+\.[0-9]\+\.[0-9]\+'
-    then
-        return 0
-    fi
-
-    return 1
-}
-
-get_version_dir() {
-    local version="$1"
-    echo "$phpvm_path/installs/$version"
+    echo "$php_installs_path/$version"
     return 0
 }
 
-get_tar_url() {
+get_composer_version_dir() {
+    local version="$1"
+    echo "$composer_installs_path/$version"
+    return 0
+}
+
+get_php_tar_url() {
     local version="$1"
     echo "http://php.net/get/php-$version.tar.bz2/from/this/mirror"
 }
 
-install() {
-    local version="$2"
-    # @todo
-    local configure_string="$3"
+install_php() {
+    local requested_version="${1:-"*"}"
+    shift
+    local configure_string="$@"
 
     # init cache files
-    ls_remote > /dev/null
+    ls_remote_php > /dev/null
 
-    # search for version
-    local versions="$(ls_remote__versions)"
-    if test_full_version "$version"
-    then
-        echo "$version OK format"
-    else
-        echo "A full version not specified"
+    local version_regex
+    if ! version_regex=$(version_to_regex "$requested_version"); then
+        echo "$version_regex"
         return 1
     fi
 
-    if echo "$versions" | grep -q -e "$version"
-    then
-        echo "$version in available versions"
-    else
-        echo "$version not in available versions, try again"
+    # search for version
+    local version=$(ls_remote_php__versions | latest_matching_version "$version_regex")
+
+    if [[ -z "$version" ]]; then
+        echo "$requested_version not in available versions, try again"
+        return 1
+    fi
+
+    echo "$version in available versions (matched from $requested_version)"
+
+    if bin_path_php >/dev/null; then
+        echo "Already installed"
+        return 0
     fi
 
     echo "Starting install"
 
-    local install_dir="$(get_version_dir "$version")"
+    local install_dir="$(get_php_version_dir "$version")"
 
     echo "Install dir: $install_dir"
 
-    local install_src_dir="$(get_version_dir "$version")/src"
+    local install_src_dir="$(get_php_version_dir "$version")/src"
 
-    local tar_url="$(get_tar_url "$version")"
+    local tar_url="$(get_php_tar_url "$version")"
     local tar_file="php-${version}.tar.bz2"
     local tar_path="$downloads_path/$tar_file"
 
@@ -195,12 +236,12 @@ install() {
 
     local extracted_dir="$install_src_dir/php-$version"
 
-    # @todo don't necessarily know extracted dir pattern
     if [ -d "$extracted_dir" ]
     then
         echo "Extracted dir exists: $extracted_dir"
     else
-        tar -xvf "$tar_path" -C "$install_src_dir"
+        tar -xvf "$tar_path" -C "$install_src_dir" || return 1
+        rm "$install_src_dir"
     fi
 
     cd "$extracted_dir"
@@ -212,36 +253,112 @@ install() {
     local install_bin_path="$install_dir/bin"
     mkdir -p "$install_bin_path"
 
-    ln -s $extracted_dir/sapi/cli/php $install_bin_path/php
-    install_composer "$install_bin_path/php" "$install_bin_path"
+    ln -s "$extracted_dir/sapi/cli/php" "$install_bin_path/php"
 
     echo "php --version"
     "$install_bin_path/php" --version
-    echo "composer --version"
-    "$install_bin_path/composer" --version
 
     echo "Installation complete"
-    return 0;
+    return 0
 }
 
-bin_path() {
-    local version="$2"
-    local version_dir="$(get_version_dir "$version")"
+install_composer() {
+    local requested_version="${1:-"*"}"
+
+    # init cache files
+    ls_remote_composer >/dev/null
+
+    local version_regex
+    if ! version_regex=$(version_to_regex "$requested_version"); then
+        echo "$version_regex"
+        return 1
+    fi
+
+    # search for version
+    local version=$(ls_remote_composer__versions | latest_matching_version "$version_regex")
+
+    if [[ -z "$version" ]]; then
+        echo "$requested_version not in available versions, try again"
+        return 1
+    fi
+
+    echo "$version in available versions (matched from $requested_version)"
+
+    local install_dir="$(get_composer_version_dir "$version")"
+    mkdir -p "$install_dir"
+
+    local installed_path="$install_dir/composer.phar"
+
+    if [ ! -f "$installed_path" ]
+    then
+        echo "Downloading"
+        wget -O "$installed_path" "https://getcomposer.org/download/$version/composer.phar"
+    else
+        echo "Already downloaded"
+    fi
+
+    echo "#!/usr/bin/env bash
+php $install_dir/composer.phar \"\$@\"
+" > "$install_dir/composer"
+
+    chmod +x "$install_dir/composer"
+    chmod -w "$install_dir/composer.phar" # prevent `composer self-update` from working
+
+    echo "Installation complete"
+    return 0
+}
+
+bin_path_php() {
+    local requested_version="${1:-"*"}"
+
+    local version_regex
+    if ! version_regex=$(version_to_regex "$requested_version"); then
+        echo "$version_regex"
+        return 1
+    fi
+
+    local version=$(ls "$php_installs_path" | latest_matching_version "$version_regex")
+
+    local version_dir="$(get_php_version_dir "$version")"
     local bin_dir="$version_dir/bin"
 
     if [ ! -d "$bin_dir" ]
     then
         echo "No bin dir found"
-        exit 1
+        return 1
     fi
 
     echo "$bin_dir"
     return 0
 }
 
-remove() {
-    let version="$2"
-    let version_dir="$(get_version_dir "$version")"
+bin_path_composer() {
+    local requested_version="${1:-"*"}"
+
+    local version_regex
+    if ! version_regex=$(version_to_regex "$requested_version"); then
+        echo "$version_regex"
+        return 1
+    fi
+
+    local version=$(ls "$composer_installs_path" | latest_matching_version "$version_regex")
+
+    local version_dir="$(get_composer_version_dir "$version")"
+    local bin_dir="$version_dir"
+
+    if [ ! -d "$bin_dir" ]
+    then
+        echo "No bin dir found"
+        return 1
+    fi
+
+    echo "$bin_dir"
+    return 0
+}
+
+remove_php() {
+    local version="$1"
+    local version_dir="$(get_php_version_dir "$version")"
 
     if [ -d "$version_dir" ]
     then
@@ -251,34 +368,94 @@ remove() {
     echo "Removed $version at $version_dir"
 }
 
+remove_composer() {
+    local version="$1"
+    local version_dir="$(get_composer_version_dir "$version")"
+
+    if [ -d "$version_dir" ]
+    then
+        rm -rf "$version_dir"
+    fi
+
+    echo "Removed $version at $version_dir"
+}
+
+path_php() {
+    local version="$1"
+
+    local bin_path
+
+    if ! bin_path=$(bin_path_php "$version"); then
+        echo "$bin_path"
+        return 1
+    fi
+
+    echo "$bin_path:$(echo "$PATH" | sed -E "s%$php_installs_path/[^:]+:?%%g")"
+    return 0
+}
+
+path_composer() {
+    local version="$1"
+
+    local bin_path
+
+    if ! bin_path=$(bin_path_composer "$version"); then
+        echo "$bin_path"
+        return 1
+    fi
+
+    echo "$bin_path:$(echo "$PATH" | sed -E "s%$composer_installs_path/[^:]+:?%%g")"
+    return 0
+}
+
+switch_tool() {
+    local func="$1"
+    local tool="$2"
+
+    shift 2
+
+    case "$tool" in
+        php)
+            "$func"_php "$@"
+            ;;
+        composer)
+            "$func"_composer "$@"
+            ;;
+        *)
+            usage
+            return 1
+            ;;
+    esac
+}
+
 dir_setup
-case "$1" in
+
+command="$1"
+shift
+case "$command" in
     help)
         usage
-        exit 0
         ;;
     bin)
-        bin_path "$@"
-        exit 0
+        switch_tool bin_path "$@"
         ;;
     ls)
         ls_local "$@"
-        exit 0
         ;;
     ls-remote)
-        ls_remote
-        exit 0;
+        switch_tool ls_remote "$@"
         ;;
     remove)
-        remove "$@"
-        exit 0;
+        switch_tool remove "$@"
         ;;
     install)
-        install "$@"
-        exit 0;
+        switch_tool install "$@"
+        ;;
+    path)
+        switch_tool path "$@"
         ;;
     *)
         usage
-        exit 0
+        exit 1
         ;;
 esac
