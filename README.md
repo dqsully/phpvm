@@ -7,35 +7,66 @@ A php version manager for linux that stays out of your way.
 Clone repo somewhere
 
 ```
-phpvm ls-remote
-phpvm install 7.0.4
+phpvm install php
+phpvm install composer
 ```
 
 ## Commands
 
-```
-phpvm ls-remote
-```
+### `phpvm ls-remote <tool>`
+Where `<tool>` is `php` or `composer`, lists available versions for download for the appropriate tool.
 
-> Fetches http://php.net/downloads.php and http://php.net/releases/ and parses them for version numbers. Not 100% accurate, but not bad
+This command fetches from http://php.net/downloads.php and http://php.net/releases/ for PHP versions, and https://getcomposer.org/download/ for Composer versions.
 
-```
-phpvm install 7.0.4
-```
+### `phpvm install <tool> [version]`
+Where `<tool>` is `php` or `composer`, installs the specified version of that tool.
 
-> Creates directories `~/.phpvm/installs/7.0.4/bin` and `~/.phpvm/installs/7.0.4/src`. Downloads php, configures it, builds it, downloads composer. Then links php sapi cli bin to the `bin` directory and creates a composer bin file that just calls the downloaded `composer.phar` file with this version of php
+If version isn't set, it defaults to `*`. If version is only partial, the remaining numbers will be filled in with `*`s. For example, `phpvm install php 8` is equivalent to `phpvm install php 8.*.*`, which will install the latest PHP 8 release.
 
-```
-phpvm ls
-```
+### `phpvm ls [tool]`
+Where `<tool>` may be `php`, `composer`, or unset, lists installed versions of those tools.
 
-> Looks locally for installed cli bins
+### `phpvm bin <tool> [version]`
+Where `<tool>` is `php` or `composer`, prints the binary path for the appropriate tool and version.
 
-```
-phpvm bin
-```
+See [`phpvm install`](#phpvm-install-tool-version) for more info about the version parameter.
 
-> Outputs phpvm bin path, in this directory should be `php` and `composer` exes, so you can do: `$(phpvm bin 7.0.4)/php -r 'echo "hi";'` and `$(phpvm bin 7.0.4)/composer install`
+### `phpvm remove <tool> <version>`
+Where `<tool>` is `php` or `composer`, and `<version>` is an installed version, removes all of that version's files from the filesystem.
+
+This is the only command where the version parameter must match an exact version, for example `phpvm remove php 8.0.28`. No `*`s, partial versions, or empty parameters will work.
+
+### `phpvm path <tool> [version]`
+Prints an updated `PATH` environment variable containing the requested tool version.
+
+
+## Integrating into your .*rc
+```bash
+phpv() {
+    local newpath
+    if newpath=$(phpvm path php "$1"); then
+        PATH="$newpath"
+        echo "Using PHP from $(command -v php)"
+    else
+        echo $newpath
+        return 1
+    fi
+}
+
+composerv() {
+    local newpath
+    if newpath=$(phpvm path composer "$1"); then
+        PATH="$newpath"
+        echo "Using Composer from $(command -v composer)"
+    else
+        echo $newpath
+        return 1
+    fi
+}
+
+phpv >/dev/null
+composerv >/dev/null
+```
 
 ## Reference
 
@@ -46,23 +77,5 @@ A list of some php deps required for building
 #### Ubuntu
 
 ```
-sudo apt-get install build-essential libxml2-dev
+sudo apt-get install build-essential libxml2-dev libsqlite3-dev
 ```
-
-### Scope of features
-
-This tool is meant to do a few things: download php, configure php, build php and make finding paths to php installs easy.
-
-This is contrary to the more robust (and fantastic) tools like [rvm](https://github.com/rvm/rvm), [rbenv](https://github.com/rbenv/rbenv) and [nvm](https://github.com/creationix/nvm) - `phpvm` does less!
-
-If phpvm doesn't do something you want, consider setting up functions or aliases in your own configuration.
-
-```sh
-# in ~/.bashrc
-PHPVM_BIN="$HOME/src/phpvm/phpvm"
-MY_PHP_VERSION='7.0.4'
-alias pphp="$("$PHPVM_BIN" bin "$MY_PHP_VERSION")/php"
-alias ccomposer="$("$PHPVM_BIN" bin "$MY_PHP_VERSION")/composer"
-```
-
-This way you could use `pphp` and `ccomposer` in your shell and be using the versions managed by phpvm.
