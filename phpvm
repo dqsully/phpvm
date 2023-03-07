@@ -161,6 +161,16 @@ version_to_regex() {
     return 0
 }
 
+test_full_version() {
+    local version="$1"
+    if echo "$version" | grep -q -e '[0-9]\+\.[0-9]\+\.[0-9]\+'
+    then
+        return 0
+    fi
+
+    return 1
+}
+
 get_php_version_dir() {
     local version="$1"
     echo "$php_installs_path/$version"
@@ -358,26 +368,40 @@ bin_path_composer() {
 
 remove_php() {
     local version="$1"
+
+    if ! test_full_version "$version"; then
+        echo "Invalid PHP version $version"
+        return 1
+    fi
+
     local version_dir="$(get_php_version_dir "$version")"
 
     if [ -d "$version_dir" ]
     then
         rm -rf "$version_dir"
+        echo "Removed PHP $version at $version_dir"
+    else
+        echo "PHP $version not installed"
     fi
-
-    echo "Removed $version at $version_dir"
 }
 
 remove_composer() {
     local version="$1"
+
+    if ! test_full_version "$version"; then
+        echo "Invalid Composer version $version"
+        return 1
+    fi
+
     local version_dir="$(get_composer_version_dir "$version")"
 
     if [ -d "$version_dir" ]
     then
         rm -rf "$version_dir"
+        echo "Removed Composer $version at $version_dir"
+    else
+        echo "Composer $version not installed"
     fi
-
-    echo "Removed $version at $version_dir"
 }
 
 path_php() {
