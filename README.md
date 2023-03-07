@@ -64,8 +64,8 @@ composerv() {
     fi
 }
 
-phpv >/dev/null
-composerv >/dev/null
+phpv >/dev/null # Load latest PHP version by default
+composerv >/dev/null # Load latest Composer version by default
 ```
 
 ## Reference
