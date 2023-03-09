@@ -39,6 +39,13 @@ dir_setup() {
     fi
 }
 
+require_linux() {
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        echo "This command only works on Linux"
+        exit 1
+    fi
+}
+
 ls_remote_php__get_releases() {
     wget -qO- 'http://php.net/releases/' > "$old_rels_cache_path_php"
     wget -qO- 'http://php.net/downloads.php' > "$rels_cache_path_php"
@@ -205,6 +212,8 @@ install_php() {
             echo "Expected a second argument after --libs-from"
             return 1
         fi
+
+        require_linux
 
         local ubuntu_version="$2"
         local gnu_tuple="$(gcc -dumpmachine)"
@@ -823,15 +832,18 @@ case "$command" in
         switch_tool install "$@"
         ;;
     install-lib)
+        require_linux
         install_libs "$@"
         ;;
     remove-lib)
+        require_linux
         remove_libs "$@"
         ;;
     path)
         switch_tool path "$@"
         ;;
     ld-path)
+        require_linux
         ld_path_php "$@"
         ;;
     *)

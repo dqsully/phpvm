@@ -46,7 +46,54 @@ Prints an updated `LD_LIBRARY_PATH` environment variable for the requested tool 
 Downloads and extracts one or more packages from a specific version of Ubuntu, in case your current libraries don't match what's needed by PHP (PHP <8.1 is incompatible with OpenSSL 3 for example).
 
 
-## Integrating into your .*rc
+## Switching active PHP versions
+
+### `phpswitch.sh`
+In order to make switching PHP versions easy, portable, and configurable per directory, you can link this shell script to a binary dir for each PHP or Composer binary you want to swap versions.
+
+With `phpswitch.sh`, you can create `.phpv` files in your projects like so
+
+```bash
+php=8.0
+composer=2
+```
+
+and when you run `php`, it will automatically use the latest PHP 8.0.x release that you have installed. Similarly, running `composer` will use the latest installed Composer 2.x.x release.
+
+`phpswitch.sh` will start at the current working directory (wherever `php` was called from), searching for a `.phpv` file, and then check every parent directory until it hits the root of the filesystem. It also checks `$HOME/.phpv` as a last resort, which you can use to set the default PHP and composer versions globally.
+
+This method also currently works with Debian's alternatives system, so if you're on Ubuntu, Debian, or another Debian-based Linux distribution, and have multiple PHP versions installed, this is able to use those PHP versions as well.
+
+#### Setting up `phpswitch.sh`
+Assuming `~/bin` is a valid bin directory on your system, you can run:
+```bash
+PHPSWITCH_PATH="path/to/phpvm/phpswitch.sh"
+BIN_PATH="$HOME/bin"
+
+# Most common
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/php
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/phar
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/phar.phar
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/phpize
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/php-config
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/composer
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/composer.phar
+
+# Additional (ideal for phpvm PHP installs)
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/pear
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/peardev
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/pecl
+ln -s "$PHPSWITCH_PATH" $BIN_PATH/phpdbg
+```
+
+If you'd like to set up `~/bin` as a bin directory on your system, create the directory, and then add this line to your `.bashrc` or `.zshrc`:
+```bash
+export PATH="$HOME/bin:$PATH"
+```
+
+### Using just your `.bashrc` (or `.zshrc`, etc.)
+This method only works for phpvm PHP installations, and does not support `.phpv` files, but if the previous method doesn't work for you, this will let you switch PHP versions quickly, and won't add any overhead while calling PHP or any other command.
+
 ```bash
 phpv() {
     local newpath
