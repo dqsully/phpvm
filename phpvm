@@ -8,6 +8,8 @@ rels_cache_path_composer="$phpvm_path/tmp/releases_composer.html"
 downloads_path="$phpvm_path/tmp"
 php_installs_path="$phpvm_path/php-installs"
 composer_installs_path="$phpvm_path/composer-installs"
+phpopts_path="$phpvm_path/phpopts"
+libs_path="$phpvm_path/libs"
 
 usage() {
     echo "Usage: phpvm <command>"
@@ -20,6 +22,7 @@ usage() {
     echo -e "        bin <tool> [version]                       get bin path for an install"
     echo -e "        remove <tool> <version>                    removes a php/composer version"
     echo -e "        path <tool> [version]                      prints a PATH text including the PHP version"
+    echo -e "        install-lib <codename> <package ...>       installs an Ubuntu package from an older version"
     echo ""
     echo "Examples:"
     echo -e "   phpvm install php 8.0"
@@ -29,10 +32,11 @@ usage() {
 }
 
 dir_setup() {
-    mkdir -p $phpvm_path
-    mkdir -p $downloads_path
-    mkdir -p $php_installs_path
-    mkdir -p $composer_installs_path
+    mkdir -p "$phpvm_path" "$downloads_path" "$php_installs_path" "$composer_installs_path" "$libs_path"
+
+    if [[ ! -f "$phpopts_path" ]]; then
+        echo "--with-openssl --with-curl --with-zlib --enable-mbstring --with-pear" > "$phpopts_path"
+    fi
 }
 
 ls_remote_php__get_releases() {
@@ -60,6 +64,7 @@ ls_remote_composer__versions() {
 ls_local() {
     if [[ "$1" != "composer" ]]; then
         echo "PHP:"
+        local dir
         for dir in $php_installs_path/*; do
             if [[ "$(basename "$dir")" != "*" ]]; then
                 if [ -f "$dir/bin/php" ]; then
@@ -191,7 +196,32 @@ get_php_tar_url() {
 install_php() {
     local requested_version="${1:-"*"}"
     shift
-    local configure_string="$@"
+
+    local pkg_config_path
+    local ld_lib_path
+
+    if [[ "$1" == "--libs-from" ]]; then
+        if [[ -z "$2" ]]; then
+            echo "Expected a second argument after --libs-from"
+            return 1
+        fi
+
+        local ubuntu_version="$2"
+        local gnu_tuple="$(gcc -dumpmachine)"
+
+        pkg_config_path="$libs_path/$ubuntu_version/usr/lib/$gnu_tuple/pkgconfig"
+        ld_lib_path="$libs_path/$ubuntu_version/usr/lib/$gnu_tuple"
+
+        export PKG_CONFIG_PATH="$pkg_config_path:$PKG_CONFIG_PATH"
+        export LD_LIBRARY_PATH="$ld_lib_path:$LD_LIBRARY_PATH"
+
+        echo "Using PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+        echo "Using LD_LIBRARY_PATH=$LD_LIBRARY_PATH (will be saved to PHP installation)"
+
+        shift 2
+    fi
+
+    local configure_string=("$@")
 
     # init cache files
     ls_remote_php > /dev/null
@@ -212,7 +242,7 @@ install_php() {
 
     echo "$version in available versions (matched from $requested_version)"
 
-    if bin_path_php >/dev/null; then
+    if bin_path_php "$version" >/dev/null; then
         echo "Already installed"
         return 0
     fi
@@ -235,7 +265,6 @@ install_php() {
         wget -O "$tar_path" "$tar_url"
     fi
 
-
     if [ ! -f "$tar_path" ]
     then
         echo "Cannot find $tar_path, check download"
@@ -256,17 +285,28 @@ install_php() {
 
     cd "$extracted_dir"
 
-    ./configure "$configure_string"
-    make
-
     # link bins
-    local install_bin_path="$install_dir/bin"
-    mkdir -p "$install_bin_path"
+    local install_bin_dir="$install_dir/bin"
+    local install_conf_dir="$install_dir/etc"
 
-    ln -s "$extracted_dir/sapi/cli/php" "$install_bin_path/php"
+    ./configure "--prefix=$install_dir" "--with-config-file-path=$install_conf_dir" "--with-config-file-scan-dir=$install_conf_dir/php.ini.d" $(cat "$phpopts_path") "$configure_string" || return
+    make "-j$(nproc)" || return
+    make install || return
+
+    echo "$ld_lib_path" > "$install_dir/LD_LIBRARY_PATH"
+
+    # make configs
+    echo "# Add config overrides here" > "$install_conf_dir/php.ini"
+    mkdir -p "$install_conf_dir/php.ini.d"
 
     echo "php --version"
-    "$install_bin_path/php" --version
+    if ! "$install_bin_dir/php" --version; then
+        echo "PHP installation failed, binaries not linked"
+        return 1
+    fi
+
+    # Tell pear where our php.ini is
+    pear config-set php_ini "$install_conf_dir/php.ini" system
 
     echo "Installation complete"
     return 0
@@ -331,14 +371,37 @@ bin_path_php() {
 
     local version_dir="$(get_php_version_dir "$version")"
     local bin_dir="$version_dir/bin"
+    local bin_file="$bin_dir/php"
 
-    if [ ! -d "$bin_dir" ]
+    if [ ! -f "$bin_file" ]
     then
-        echo "No bin dir found"
+        echo "No PHP binary found"
         return 1
     fi
 
     echo "$bin_dir"
+    return 0
+}
+
+ld_lib_path_php() {
+    local requested_version="${1:-"*"}"
+
+    local version_regex
+    if ! version_regex=$(version_to_regex "$requested_version"); then
+        echo "$version_regex"
+        return 1
+    fi
+
+    local version=$(ls "$php_installs_path" | latest_matching_version "$version_regex")
+
+    local version_dir="$(get_php_version_dir "$version")"
+    local path_file="$version_dir/LD_LIBRARY_PATH"
+
+    if [ ! -f "$path_file" ]; then
+        return 1
+    fi
+
+    cat "$path_file"
     return 0
 }
 
@@ -355,10 +418,11 @@ bin_path_composer() {
 
     local version_dir="$(get_composer_version_dir "$version")"
     local bin_dir="$version_dir"
+    local bin_file="$bin_dir/composer"
 
-    if [ ! -d "$bin_dir" ]
+    if [ ! -f "$bin_file" ]
     then
-        echo "No bin dir found"
+        echo "No Composer executable found"
         return 1
     fi
 
@@ -418,6 +482,20 @@ path_php() {
     return 0
 }
 
+ld_path_php() {
+    local version="$1"
+
+    local ld_lib_path
+
+    if ! ld_lib_path=$(ld_lib_path_php "$version"); then
+        echo "$ld_lib_path"
+        return 1
+    fi
+
+    echo "$ld_lib_path:$(echo "$LD_LIBRARY_PATH" | sed -E "s%$libs_path/[^:]+:?%%g")"
+    return 0
+}
+
 path_composer() {
     local version="$1"
 
@@ -429,6 +507,275 @@ path_composer() {
     fi
 
     echo "$bin_path:$(echo "$PATH" | sed -E "s%$composer_installs_path/[^:]+:?%%g")"
+    return 0
+}
+
+get_deb_server() {
+    case "$(uname -m)" in
+        x86_64)
+            echo "http://archive.ubuntu.com/ubuntu"
+            ;;
+        i386|i686)
+            echo "http://archive.ubuntu.com/ubuntu"
+            ;;
+        arm64|aarch64)
+            echo "http://ports.ubuntu.com/ubuntu-ports"
+            ;;
+        armv7l)
+            echo "http://ports.ubuntu.com/ubuntu-ports"
+            ;;
+    esac
+}
+
+get_ubuntu_arch() {
+    case "$(uname -m)" in
+        x86_64)
+            echo "amd64"
+            ;;
+        i386|i686)
+            echo "i386"
+            ;;
+        arm64|aarch64)
+            echo "arm64"
+            ;;
+        armv7l)
+            echo "armhf"
+            ;;
+    esac
+}
+
+refresh_ubuntu_indexes() {
+    local ubuntu_version="$1"
+    local ubuntu_arch="$2"
+    local deb_server="$3"
+
+    local cache_time=$((60*60*24))
+    # local cache_time=0 # for debug
+
+    local ubuntu_dists=("$ubuntu_version" "$ubuntu_version-security" "$ubuntu_version-updates")
+    local ubuntu_channels=("main" "restricted" "universe" "multiverse")
+
+    local dist
+    local channel
+    local idx=0
+
+    local download_dir="$downloads_path/$ubuntu_version"
+    mkdir -p "$download_dir"
+
+    for dist in "${ubuntu_dists[@]}"; do
+        for channel in "${ubuntu_channels[@]}"; do
+            idx=$((idx+1))
+            local download_file="$download_dir/$(printf %03d $idx)-$dist.$channel.packages"
+
+            if [[ -f "$download_file" ]]; then
+                local last_mod_time=$(stat "$download_file" -c %Y)
+                local cur_time=$(date +"%s")
+                local time_diff=$(($cur_time - $last_mod_time))
+                if [[ "$time_diff" -lt "$cache_time" ]]; then
+                    continue
+                fi
+            fi
+
+            echo "Downloading package index for Ubuntu $dist $channel $ubuntu_arch"
+
+            wget -q -O "$download_file.gz" "$deb_server/dists/$dist/$channel/binary-$ubuntu_arch/Packages.gz" || return
+            gunzip -f "$download_file.gz" || return
+            touch "$download_file" # Set updated time
+        done
+    done
+
+    return 0
+}
+
+get_deb_url_path() {
+    local ubuntu_version="$1"
+    local lib="$2"
+
+    local deb
+    local file
+
+    for file in $(find "$downloads_path/$ubuntu_version" -maxdepth 1 -type f | sort); do
+        deb=$(awk -F': ' '$1 == "Package" && $2 == "'"$lib"'" {f=0; while(getline > 0 && $0 != "") { if ($1 == "Filename") print $2 }}' "$file")
+
+        if [[ ! -z "$deb" ]]; then
+            echo "$deb"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+get_deb_dependencies() {
+    local ubuntu_version="$1"
+    local lib="$2"
+
+    local deps
+    local deb
+    local file
+
+    for file in $(find "$downloads_path/$ubuntu_version" -maxdepth 1 -type f | sort); do
+        deb=$(awk -F': ' '$1 == "Package" && $2 == "'"$lib"'" {f=0; while(getline > 0 && $0 != "") { if ($1 == "Filename") print $2 }}' "$file")
+        deps=$(awk -F': ' '$1 == "Package" && $2 == "'"$lib"'" {f=0; while(getline > 0 && $0 != "") { if ($1 == "Depends") print $2 }}' "$file" | sed 's/, /\n/g' | cut -d' ' -f1)
+
+        if [[ ! -z "$deb" ]]; then
+            echo "$deps"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+install_lib() {
+    local ubuntu_version="$1"
+    local deb_server="$2"
+    local lib="$3"
+
+    local download_dir="$downloads_path/$ubuntu_version/$lib"
+    mkdir -p "$download_dir"
+
+    local deb_path="$download_dir/package.deb"
+    local deb_url_path
+
+    if ! deb_url_path="$(get_deb_url_path "$ubuntu_version" "$lib")"; then
+        echo "Package $lib not found in package indexes for Ubuntu $ubuntu_version"
+        return 1
+    fi
+
+    local extract_to_dir="$libs_path/$ubuntu_version"
+    mkdir -p "$extract_to_dir"
+
+    local install_manifest="$extract_to_dir/installed/$lib"
+
+    if [[ -f "$install_manifest" ]]; then
+        if [[ "$(head -n 1 $install_manifest)" == "$deb_url_path" ]]; then
+            echo "Package $lib already installed and up-to-date"
+            return 0
+        fi
+        echo "Removing old $lib version"
+        remove_lib "$ubuntu_version" "$lib"
+    fi
+
+    echo "Downloading $(basename "$deb_url_path")"
+    wget -q -O "$deb_path" "$deb_server/$deb_url_path" || return
+    ar -x "$deb_path" --output "$download_dir" || return
+
+    echo "Extracting"
+
+    local data_file=$(find "$download_dir" -maxdepth 1 -type f -name 'data.tar.*')
+    tar -C "$extract_to_dir" -xaf "$data_file" || return
+
+    local extracted_files
+    mapfile -t extracted_files < <(tar -taf "$data_file")
+
+    local extracted_file
+    for extracted_file in "${extracted_files[@]}"; do
+        echo "Extracted $extracted_file"
+
+        if [[ "$extracted_file" =~ ^'./usr/lib/'[^/]+'/pkgconfig/'[^/]+'.pc'$ ]]; then
+            # Fix pkg-config files
+            extracted_file="$extract_to_dir/${extracted_file:2}"
+
+            echo "Fixing pkg-config file $extracted_file"
+            sed -i -E -e "s%^([a-z_]+)=/usr%\1=$extract_to_dir/usr%g" "$extracted_file"
+        elif [[ "$extracted_file" =~ ^'./usr/lib/'[^/]+'/'[^/]+'.la'$ ]]; then
+            # Fix libtool files
+            extracted_file="$extract_to_dir/${extracted_file:2}"
+
+            echo "Fixing libtool file $extracted_file"
+            sed -i -E -e "s%^([a-z_]+)='/usr%\1='$extract_to_dir/usr%g" "$extracted_file"
+        fi
+    done
+
+    mkdir -p "$extract_to_dir/installed"
+    echo "$deb_url_path" > "$install_manifest"
+    tar -taf "$data_file" >> "$install_manifest"
+
+    rm -rf "$download_dir"
+
+    local deps
+    mapfile -t deps < <(get_deb_dependencies "$ubuntu_version" "$lib")
+
+    local dep
+    for dep in "${deps[@]}"; do
+        if [[ ! -z "$dep" ]]; then
+            echo "Package $lib has dependency $dep"
+            install_lib "$ubuntu_version" "$deb_server" "$dep" || return
+        fi
+    done
+
+    return 0
+}
+
+remove_lib() {
+    local ubuntu_version="$1"
+    local lib="$2"
+
+    local extract_to_dir="$libs_path/$ubuntu_version"
+    local install_manifest="$extract_to_dir/installed/$lib"
+
+    if [[ -f "$install_manifest" ]]; then
+        local files
+        mapfile -t files < <(tail "$install_manifest" -n +2 | awk '{ print(length, "'"$extract_to_dir/"'"substr($0, 3)) }' | sort -nr | cut -d" " -f2-)
+
+        local file
+        for file in "${files[@]}"; do
+            if [[ -d $file ]]; then
+                rmdir $file &>/dev/null # Attempt to remove it if it's empty
+            else
+                rm $file &>/dev/null # Remove the file
+            fi
+        done
+
+        rm "$install_manifest"
+    fi
+
+    return 0
+}
+
+install_libs() {
+    local ubuntu_version="$1"
+    shift
+    local libs=("$@")
+
+    if [[ -z "$1" ]]; then
+        usage
+        return 1
+    fi
+
+    local deb_server="$(get_deb_server)"
+    local ubuntu_arch="$(get_ubuntu_arch)"
+
+    refresh_ubuntu_indexes "$ubuntu_version" "$ubuntu_arch" "$deb_server" || return
+
+    local lib
+    for lib in "${libs[@]}"; do
+        install_lib "$ubuntu_version" "$deb_server" "$lib" || return
+    done
+
+    echo "Done"
+
+    return 0
+}
+
+remove_libs() {
+    local ubuntu_version="$1"
+    shift
+    local libs=("$@")
+
+    if [[ -z "$1" ]]; then
+        usage
+        return 1
+    fi
+
+    local lib
+    for lib in "${libs[@]}"; do
+        remove_lib "$ubuntu_version" "$lib"
+    done
+
+    echo "Done"
+
     return 0
 }
 
@@ -475,8 +822,17 @@ case "$command" in
     install)
         switch_tool install "$@"
         ;;
+    install-lib)
+        install_libs "$@"
+        ;;
+    remove-lib)
+        remove_libs "$@"
+        ;;
     path)
         switch_tool path "$@"
+        ;;
+    ld-path)
+        ld_path_php "$@"
         ;;
     *)
         usage
