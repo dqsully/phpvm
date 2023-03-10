@@ -53,7 +53,7 @@ In order to make switching PHP versions easy, portable, and configurable per dir
 
 With `phpswitch.sh`, you can create `.phpv` files in your projects like so
 
-```bash
+```
 php=8.0
 composer=2
 ```
@@ -146,5 +146,218 @@ A list of some php deps required for building
 #### Ubuntu
 
 ```
-sudo apt-get install build-essential libxml2-dev libsqlite3-dev libssl-dev libcurl4-openssl-dev
+sudo apt-get install build-essential libxml2-dev libsqlite3-dev libssl-dev libcurl4-openssl-dev zlib1g-dev
+```
+
+### PHP `./configure` flags
+In order to select which libraries, extensions, and features are compiled into PHP by default, PHP's build process accepts a list of command-line flags. `phpvm` reads the file at `~/.phpvm/phpopts` for the default flags to use, and you can also add one-time flags to the end of the `phpvm install` command.
+
+The first time you run `phpvm`, it will automatically write the following contents to `~/.phpvm/phpopts`, enabling commonly-used extensions:
+```
+--with-openssl --with-curl --with-zlib --enable-mbstring --with-pear
+```
+
+In my particular installation, my `~/.phpvm/phpopts` file looks like this, because I wanted even more extensions (at the cost of longer compile times):
+```
+--with-openssl --with-pcre-jit --with-zlib --with-bz2 --with-curl --enable-gd --with-webp --with-jpeg --with-xpm --with-freetype --enable-mbstring --with-mysqli --with-pdo-mysql --with-pear
+```
+
+Of course, to get this to work, I had to install more dev libraries using `apt-get`. If you'd like to go down this path as well, whenever `phpvm install` errors out because of a missing library, try searching the Ubuntu repositories using `apt-get search <name> dev`, and install the appropriate dev package for the library you're missing. For example, to install the `gd` library I ran `apt-get search gd dev`, found the package called `libgd-dev`, and installed it with `sudo apt-get install libgd-dev`.
+
+#### Available `./configure` options
+Here's part of a dump from running `./configure --help` from the PHP 8.2.3 sources:
+```
+Extensions:
+
+  --with-EXTENSION=shared[,PATH]
+
+    NOTE: Not all extensions can be build as 'shared'.
+
+    Example: --with-foobar=shared,/usr/local/foobar/
+
+      o Builds the foobar extension as shared extension.
+      o foobar package install prefix is /usr/local/foobar/
+
+
+  --disable-all           Disable all extensions which are enabled by default
+  --without-libxml        Build without LIBXML support
+  --with-openssl          Include OpenSSL support (requires OpenSSL >= 1.0.2)
+  --with-kerberos         OPENSSL: Include Kerberos support
+  --with-system-ciphers   OPENSSL: Use system default cipher list instead of
+                          hardcoded value
+  --with-external-pcre    Use external library for PCRE support
+  --without-pcre-jit      Disable PCRE JIT functionality
+  --without-sqlite3       Do not include SQLite3 support.
+  --with-zlib             Include ZLIB support (requires zlib >= 1.2.0.4)
+  --enable-bcmath         Enable bc style precision math functions
+  --with-bz2[=DIR]        Include BZip2 support
+  --enable-calendar       Enable support for calendar conversion
+  --disable-ctype         Disable ctype functions
+  --with-curl             Include cURL support
+  --enable-dba            Build DBA with bundled modules. To build shared DBA
+                          extension use --enable-dba=shared
+  --with-qdbm[=DIR]       DBA: QDBM support
+  --with-gdbm[=DIR]       DBA: GDBM support
+  --with-ndbm[=DIR]       DBA: NDBM support
+  --with-db4[=DIR]        DBA: Oracle Berkeley DB 4.x or 5.x support
+  --with-db3[=DIR]        DBA: Oracle Berkeley DB 3.x support
+  --with-db2[=DIR]        DBA: Oracle Berkeley DB 2.x support
+  --with-db1[=DIR]        DBA: Oracle Berkeley DB 1.x support/emulation
+  --with-dbm[=DIR]        DBA: DBM support
+  --with-tcadb[=DIR]      DBA: Tokyo Cabinet abstract DB support
+  --with-lmdb[=DIR]       DBA: Lightning memory-mapped database support
+  --without-cdb[=DIR]     DBA: CDB support (bundled)
+  --disable-inifile       DBA: INI support (bundled)
+  --disable-flatfile      DBA: FlatFile support (bundled)
+  --enable-dl-test        Enable dl_test extension
+  --disable-dom           Disable DOM support
+  --with-enchant          Include Enchant support
+  --enable-exif           Enable EXIF (metadata from images) support
+  --with-ffi              Include FFI support
+  --disable-fileinfo      Disable fileinfo support
+  --disable-filter        Disable input filter support
+  --enable-ftp            Enable FTP support
+  --with-openssl-dir      FTP: Whether to enable FTP SSL support without
+                          ext/openssl
+  --enable-gd             Include GD support
+  --with-external-gd      Use external libgd
+  --with-avif             GD: Enable AVIF support (only for bundled libgd)
+  --with-webp             GD: Enable WEBP support (only for bundled libgd)
+  --with-jpeg             GD: Enable JPEG support (only for bundled libgd)
+  --with-xpm              GD: Enable XPM support (only for bundled libgd)
+  --with-freetype         GD: Enable FreeType 2 support (only for bundled
+                          libgd)
+  --enable-gd-jis-conv    GD: Enable JIS-mapped Japanese font support (only
+                          for bundled libgd)
+  --with-gettext[=DIR]    Include GNU gettext support
+  --with-gmp[=DIR]        Include GNU MP support
+  --with-mhash            Include mhash support
+  --without-iconv[=DIR]   Exclude iconv support
+  --with-imap[=DIR]       Include IMAP support. DIR is the c-client install
+                          prefix
+  --with-kerberos         IMAP: Include Kerberos support
+  --with-imap-ssl         IMAP: Include SSL support
+  --enable-intl           Enable internationalization support
+  --with-ldap[=DIR]       Include LDAP support
+  --with-ldap-sasl        LDAP: Build with Cyrus SASL support
+  --enable-mbstring       Enable multibyte string support
+  --disable-mbregex       MBSTRING: Disable multibyte regex support
+  --with-mysqli           Include MySQLi support. The MySQL native driver will
+                          be used
+  --with-mysql-sock[=SOCKPATH]
+                          MySQLi/PDO_MYSQL: Location of the MySQL unix socket
+                          pointer. If unspecified, the default locations are
+                          searched
+  --with-oci8[=DIR]       Include Oracle Database OCI8 support. DIR defaults
+                          to $ORACLE_HOME. Use
+                          --with-oci8=instantclient,/path/to/instant/client/lib
+                          to use an Oracle Instant Client installation
+  --with-odbcver[=HEX]    Force support for the passed ODBC version. A hex
+                          number is expected, default 0x0350. Use the special
+                          value of 0 to prevent an explicit ODBCVER to be
+                          defined.
+  --with-adabas[=DIR]     Include Adabas D support [/usr/local]
+  --with-sapdb[=DIR]      Include SAP DB support [/usr/local]
+  --with-solid[=DIR]      Include Solid support [/usr/local/solid]
+  --with-ibm-db2[=DIR]    Include IBM DB2 support [/home/db2inst1/sqllib]
+  --with-empress[=DIR]    Include Empress support $EMPRESSPATH (Empress
+                          Version >= 8.60 required)
+  --with-empress-bcs[=DIR]
+                          Include Empress Local Access support $EMPRESSPATH
+                          (Empress Version >= 8.60 required)
+  --with-custom-odbc[=DIR]
+                          Include user defined ODBC support. DIR is ODBC
+                          install base directory [/usr/local]. Make sure to
+                          define CUSTOM_ODBC_LIBS and have some odbc.h in your
+                          include dirs. For example, you should define
+                          following for Sybase SQL Anywhere 5.5.00 on QNX,
+                          prior to running this configure script:
+                          CPPFLAGS="-DODBC_QNX -DSQLANY_BUG" LDFLAGS=-lunix
+                          CUSTOM_ODBC_LIBS="-ldblib -lodbc"
+  --with-iodbc            Include iODBC support
+  --with-esoob[=DIR]      Include Easysoft OOB support
+                          [/usr/local/easysoft/oob/client]
+  --with-unixODBC         Include unixODBC support
+  --with-dbmaker[=DIR]    Include DBMaker support
+  --disable-opcache       Disable Zend OPcache support
+  --disable-huge-code-pages
+                          Disable copying PHP CODE pages into HUGE PAGES
+  --disable-opcache-jit   Disable JIT
+  --enable-pcntl          Enable pcntl support (CLI/CGI only)
+  --disable-pdo           Disable PHP Data Objects support
+  --with-pdo-dblib[=DIR]  PDO: DBLIB-DB support. DIR is the FreeTDS home
+                          directory
+  --with-pdo-firebird[=DIR]
+                          PDO: Firebird support. DIR is the Firebird base
+                          install directory [/opt/firebird]
+  --with-pdo-mysql[=DIR]  PDO: MySQL support. DIR is the MySQL base directory.
+                          If no value or mysqlnd is passed as DIR, the MySQL
+                          native driver will be used
+  --with-zlib-dir[=DIR]   PDO_MySQL: Set the path to libz install prefix
+  --with-pdo-oci[=DIR]    PDO: Oracle OCI support. DIR defaults to
+                          $ORACLE_HOME. Use
+                          --with-pdo-oci=instantclient,/path/to/instant/client/lib
+                          for an Oracle Instant Client installation.
+  --with-pdo-odbc=flavour,dir
+                          PDO: Support for 'flavour' ODBC driver. The include
+                          and lib dirs are looked for under 'dir'. The
+                          'flavour' can be one of: ibm-db2, iODBC, unixODBC,
+                          generic. If ',dir' part is omitted, default for the
+                          flavour you have selected will be used. e.g.:
+                          --with-pdo-odbc=unixODBC will check for unixODBC
+                          under /usr/local. You may attempt to use an
+                          otherwise unsupported driver using the 'generic'
+                          flavour. The syntax for generic ODBC support is:
+                          --with-pdo-odbc=generic,dir,libname,ldflags,cflags.
+                          When built as 'shared' the extension filename is
+                          always pdo_odbc.so
+  --with-pdo-pgsql[=DIR]  PDO: PostgreSQL support. DIR is the PostgreSQL base
+                          install directory or the path to pg_config
+  --without-pdo-sqlite    PDO: sqlite 3 support.
+  --with-pgsql[=DIR]      Include PostgreSQL support. DIR is the PostgreSQL
+                          base install directory or the path to pg_config
+  --disable-phar          Disable phar support
+  --disable-posix         Disable POSIX-like functions
+  --with-pspell[=DIR]     Include PSPELL support. GNU Aspell version 0.50.0 or
+                          higher required
+  --with-libedit          Include libedit readline replacement (CLI/CGI only)
+  --with-readline[=DIR]   Include readline support (CLI/CGI only)
+  --disable-session       Disable session support
+  --with-mm[=DIR]         SESSION: Include mm support for session storage
+  --enable-shmop          Enable shmop support
+  --disable-simplexml     Disable SimpleXML support
+  --with-snmp[=DIR]       Include SNMP support
+  --enable-soap           Enable SOAP support
+  --enable-sockets        Enable sockets support
+  --with-sodium           Include sodium support
+  --with-external-libcrypt
+                          Use external libcrypt or libxcrypt
+  --with-password-argon2  Include Argon2 support in password_*
+  --enable-sysvmsg        Enable sysvmsg support
+  --enable-sysvsem        Enable System V semaphore support
+  --enable-sysvshm        Enable the System V shared memory support
+  --with-tidy[=DIR]       Include TIDY support
+  --disable-tokenizer     Disable tokenizer support
+  --disable-xml           Disable XML support
+  --with-expat            XML: use expat instead of libxml2
+  --disable-xmlreader     Disable XMLReader support
+  --disable-xmlwriter     Disable XMLWriter support
+  --with-xsl              Build with XSL support
+  --enable-zend-test      Enable zend_test extension
+  --with-zip              Include Zip read/write support
+  --enable-mysqlnd        Enable mysqlnd explicitly, will be done implicitly
+                          when required by other extensions
+  --disable-mysqlnd-compression-support
+                          Disable support for the MySQL compressed protocol in
+                          mysqlnd
+
+PEAR:
+
+  --with-pear[=DIR]       Install PEAR in DIR [PREFIX/lib/php]
+  --disable-fiber-asm     Disable the use of boost fiber assembly files
+
+Zend:
+
+  --disable-zend-signals  whether to enable zend signal handling
+
 ```
