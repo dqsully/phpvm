@@ -90,8 +90,8 @@ find_php_tool() {
 
     local matching_phpvm_version=$(ls "$php_installs_path" | latest_matching_version "$version_regex")
     if [[ ! -z "$matching_phpvm_version" ]]; then
-        export PHPVM_PHP_MODE="phpvm"
-        export PHPVM_PHP_DIR="$php_installs_path/$matching_phpvm_version/bin"
+        export PHPSWITCH_PHP_MODE="phpvm"
+        export PHPSWITCH_PHP_DIR="$php_installs_path/$matching_phpvm_version/bin"
 
         if [[ -f "$php_installs_path/$matching_phpvm_version/LD_LIBRARY_PATH" ]]; then
             export LD_LIBRARY_PATH="$(cat "$php_installs_path/$matching_phpvm_version/LD_LIBRARY_PATH"):$LD_LIBRARY_PATH"
@@ -103,9 +103,9 @@ find_php_tool() {
     # TODO: crawl all binary directories instead of just /usr/bin?
     local matching_sys_php_version=$(find "/usr/bin" -maxdepth 1 -type f -regex '^/usr/bin/php[0-9.]+$' | sed 's/^.+php//g' | latest_matching_version "$version_regex")
     if [[ ! -z "$matching_sys_php_version" ]]; then
-        export PHPVM_PHP_MODE="debian-alternatives"
-        export PHPVM_PHP_SUFFIX="$matching_sys_php_version"
-        export PHPVM_PHP_DIR="/usr/bin"
+        export PHPSWITCH_PHP_MODE="debian-alternatives"
+        export PHPSWITCH_PHP_SUFFIX="$matching_sys_php_version"
+        export PHPSWITCH_PHP_DIR="/usr/bin"
 
         return 0
     fi
@@ -130,7 +130,7 @@ find_composer_tool() {
 
     local matching_phpvm_version=$(ls "$composer_installs_path" | latest_matching_version "$version_regex")
     if [[ ! -z "$matching_phpvm_version" ]]; then
-        export PHPVM_COMPOSER_DIR="$composer_installs_path/$matching_phpvm_version"
+        export PHPSWITCH_COMPOSER_DIR="$composer_installs_path/$matching_phpvm_version"
 
         return 0
     fi
@@ -144,30 +144,30 @@ find_composer_tool() {
 }
 
 call_php_tool() {
-    if [[ -z "$PHPVM_PHP_DIR" ]]; then
+    if [[ -z "$PHPSWITCH_PHP_DIR" ]]; then
         find_php_tool || return
     fi
 
-    case "$PHPVM_PHP_MODE" in
+    case "$PHPSWITCH_PHP_MODE" in
         debian-alternatives)
-            "$PHPVM_PHP_DIR/php$PHPVM_PHP_SUFFIX" "$@"
+            "$PHPSWITCH_PHP_DIR/php$PHPSWITCH_PHP_SUFFIX" "$@"
             ;;
         phpvm)
-            "$PHPVM_PHP_DIR/php" "$@"
+            "$PHPSWITCH_PHP_DIR/php" "$@"
             ;;
         *)
-            echo "Unsupported PHP mode '$PHPVM_PHP_MODE'"
+            echo "Unsupported PHP mode '$PHPSWITCH_PHP_MODE'"
             return 1
             ;;
     esac
 }
 
 call_composer_tool() {
-    if [[ -z "$PHPVM_COMPOSER_DIR" ]]; then
+    if [[ -z "$PHPSWITCH_COMPOSER_DIR" ]]; then
         find_composer_tool || return
     fi
 
-    "$PHPVM_COMPOSER_DIR/composer" "$@"
+    "$PHPSWITCH_COMPOSER_DIR/composer" "$@"
 }
 
 bin_name=$(basename "$0")
@@ -180,7 +180,7 @@ case "$bin_name" in
         call_composer_tool "$@"
         ;;
     *)
-        echo "Unsupported tool for phpvm: $bin_name"
+        echo "Unsupported tool for phpswitch.sh: $bin_name"
         exit 1
         ;;
 esac
