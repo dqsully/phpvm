@@ -150,10 +150,10 @@ call_php_tool() {
 
     case "$PHPSWITCH_PHP_MODE" in
         debian-alternatives)
-            "$PHPSWITCH_PHP_DIR/php$PHPSWITCH_PHP_SUFFIX" "$@"
+            "$PHPSWITCH_PHP_DIR/$bin_name$PHPSWITCH_PHP_SUFFIX" "$@"
             ;;
         phpvm)
-            "$PHPSWITCH_PHP_DIR/php" "$@"
+            "$PHPSWITCH_PHP_DIR/$bin_name" "$@"
             ;;
         *)
             echo "Unsupported PHP mode '$PHPSWITCH_PHP_MODE'"
