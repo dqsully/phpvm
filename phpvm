@@ -315,7 +315,7 @@ install_php() {
     fi
 
     # Tell pear where our php.ini is
-    pear config-set php_ini "$install_conf_dir/php.ini" system
+    "$install_bin_dir/pear" config-set php_ini "$install_conf_dir/php.ini" system
 
     echo "Installation complete"
     return 0
