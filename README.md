@@ -129,7 +129,7 @@ composerv >/dev/null # Load latest Composer version by default
 ## Installing PHP <=8.0 on Ubuntu 22.04+
 PHP 8.0 and prior versions are incompatible with OpenSSL 3, which is installed in Ubuntu 22.04+ by default. To fix this, phpvm allows downloading and compiling against packages from older Ubuntu versions.
 
-On Ubuntu 22.04 (codename "focal fossa", aka just "focal"), these are the commands I had to run to get PHP 8.0 compiled and working:
+On Ubuntu 22.04, these are the commands I had to run to get PHP 8.0 compiled and working, using libraries from Ubuntu 20.04 (codename "focal"):
 ```bash
 phpvm install-lib focal libcurl4-openssl-dev libssl-dev
 phpvm install php 8.0 --libs-from focal
@@ -159,7 +159,7 @@ The first time you run `phpvm`, it will automatically write the following conten
 
 In my particular installation, my `~/.phpvm/phpopts` file looks like this, because I wanted even more extensions (at the cost of longer compile times):
 ```
---with-openssl --with-pcre-jit --with-zlib --with-bz2 --with-curl --enable-gd --with-webp --with-jpeg --with-xpm --with-freetype --enable-mbstring --with-mysqli --with-pdo-mysql --with-pear
+--with-openssl --with-pcre-jit --with-zlib --with-bz2 --with-curl --enable-gd --with-webp --with-jpeg --with-xpm --with-freetype --enable-mbstring --with-mysqli --with-pdo-mysql --with-pear --enable-soap
 ```
 
 Of course, to get this to work, I had to install more dev libraries using `apt-get`. If you'd like to go down this path as well, whenever `phpvm install` errors out because of a missing library, try searching the Ubuntu repositories using `apt-get search <name> dev`, and install the appropriate dev package for the library you're missing. For example, to install the `gd` library I ran `apt-get search gd dev`, found the package called `libgd-dev`, and installed it with `sudo apt-get install libgd-dev`.
